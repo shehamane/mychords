@@ -1,0 +1,35 @@
+version: '3.1'
+
+services:
+  db:
+    container_name: db
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: kurichords_db
+    volumes:
+      - ./database:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  adminer:
+    container_name: adminer
+    image: adminer
+    restart: always
+    ports:
+      - "8080:8080"
+
+  tgbot:
+    container_name: bot
+    build:
+      context: .
+    command: python src/app.py
+    volumes:
+      - ./audio:/build/audio
+    restart: always
+    depends_on:
+      - db
+    env_file:
+      - "src/.env"
