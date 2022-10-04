@@ -1,5 +1,6 @@
 import autochord
-from pydub import AudioSegment
 
-AudioSegment.from_mp3('audio/test1 - test1.mp3').export('audio/test1 - test1.wav', format='wav')
-print(autochord.recognize('audio/test1 - test1.wav'))
+from utils.misc.accuracy import calculate_accuracy
+
+print(autochord.recognize('audio/cover14.wav'))
+# calculate_accuracy('audio/cover11.wav', 'audio/test2 - test2.wav')

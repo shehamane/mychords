@@ -1,11 +1,13 @@
+import datetime
+
 from aiogram import types
 from gino import Gino
-from sqlalchemy import Column, Sequence, sql
-from sqlalchemy import Enum, BigInteger, String, Integer, ForeignKey, Time
+from sqlalchemy import Column, Sequence, sql, DateTime, TIMESTAMP, Interval, FLOAT
+from sqlalchemy import BigInteger, String, Integer, ForeignKey, Time
 from sqlalchemy.orm import relationship
 
-from data.guitar_config import formations
-from data.api_config import USERS_PAGE_VOLUME
+from data.gui_config import USERS_PAGE_VOLUME, SONGS_PAGE_VOLUME, CHORDS_PAGE_VOLUME, COVERS_PAGE_VOLUME
+from data.structure_config import AUDIO_DIR_PATH
 
 db = Gino()
 
@@ -16,7 +18,7 @@ class User(db.Model):
 
     id = Column(Integer, Sequence("user_id_seq"), primary_key=True)
     user_id = Column(BigInteger, unique=True)
-    username = Column(String(255))
+    username = Column(String(255), unique=True)
 
     songs = relationship("Song", back_populates="user")
 
@@ -42,16 +44,43 @@ class Chord(db.Model):
     query: sql.Select
 
     id = Column(Integer, Sequence("chord_id_seq"), primary_key=True)
-    name = Column(String(5))
+    name = Column(String(10))
     song_id = Column(Integer, ForeignKey('songs.id'))
-    start = Column(Time())
-    stop = Column(Time())
+    start = Column(FLOAT)
+    end = Column(FLOAT)
 
     song = relationship("Song", back_populates="chords")
 
 
+class Cover(db.Model):
+    __tablename__ = "covers"
+    query: sql.Select
+
+    id = Column(Integer, Sequence("cover_id_seq"), primary_key=True)
+    name = Column(String(255))
+    song_id = Column(Integer, ForeignKey('songs.id'))
+    user_id = Column(Integer, ForeignKey('users.id'))
+    date = Column(DateTime)
+    accuracy = Column(Integer)
+    file_name = Column(String(255), unique=True)
+
+    song = relationship("Song", back_populates="covers")
+    user = relationship("User", back_populates="covers")
+
+
+class Subscription(db.Model):
+    __tablename__ = "subscriptions"
+    query: sql.Select
+
+    id = Column(Integer, Sequence("subscription_id_seq"), primary_key=True)
+    subscribed_id = Column(Integer, ForeignKey('users.id'))
+    subscriber_id = Column(Integer, ForeignKey('users.id'))
+
+    subscribed = relationship("User", back_populates="subscribers")
+
+
 class DBCommands:
-    # USERS
+    # USERS ###########################3
     async def create_user(self):
         user = types.User.get_current()
 
@@ -62,7 +91,6 @@ class DBCommands:
         new_user = User()
         new_user.user_id = user.id
         new_user.username = user.username
-        new_user.balance = 0
 
         await new_user.create()
         return new_user
@@ -93,10 +121,10 @@ class DBCommands:
             page_num * USERS_PAGE_VOLUME).gino.all()
         return users_list
 
-    # CATEGORIES ########################################################################
+    # SONGS ########################################################################
     async def get_song(self, song_id):
-        category = await Song.get(song_id)
-        return category
+        song = await Song.get(song_id)
+        return song
 
     async def create_song(self, user_id, name, author, duration, file_name, formation='standard'):
         song = Song()
@@ -110,20 +138,93 @@ class DBCommands:
 
         return song
 
-    async def delete_song(self, id):
-        song = await self.get_song(id)
+    async def get_user_songs_list(self, user_id, page_num):
+        return await Song.query.where(Song.user_id == user_id).order_by(Song.author, Song.name).limit(
+            SONGS_PAGE_VOLUME). \
+            offset(page_num * SONGS_PAGE_VOLUME).gino.all()
+
+    async def count_user_songs_list_pages(self, user_id):
+        return int(await self.count_user_songs(user_id) / (SONGS_PAGE_VOLUME + 1))
+
+    async def count_user_songs(self, user_id):
+        return await db.select([db.func.count(Song.id)]).where(Song.user_id == user_id).gino.scalar()
+
+    async def delete_song(self, song_id):
+        song = await self.get_song(song_id)
+
+        chords = await self.get_song_chords(song_id)
+        for chord in chords:
+            await chord.delete()
         await song.delete()
 
     # CHORDS #################
 
-    async def create_chord(self, name, song_id, start, stop):
+    async def create_chord(self, song_id, name, start, end):
         chord = Chord()
         chord.name = name
         chord.song_id = song_id
         chord.start = start
-        chord.stop = stop
+        chord.end = end
+        await chord.create()
 
         return chord
+
+    async def get_song_chords(self, song_id):
+        return await Chord.query.where(Chord.song_id == song_id).gino.all()
+
+    async def get_chords_list(self, song_id, page_num):
+        return await Chord.query.where(Chord.song_id == song_id).order_by(Chord.start, Chord.end).limit(
+            CHORDS_PAGE_VOLUME). \
+            offset(page_num * CHORDS_PAGE_VOLUME).gino.all()
+
+    async def count_song_chords(self, song_id):
+        return await db.select([db.func.count(Chord.id)]).where(Chord.song_id == song_id).gino.scalar()
+
+    async def count_chords_list_pages(self, song_id):
+        return int(await self.count_song_chords(song_id) / (CHORDS_PAGE_VOLUME + 1))
+
+    # COVERS ###################33
+
+    async def create_cover(self, song_id, user_id, name):
+        cover = Cover()
+        cover.song_id = song_id
+        cover.name = name
+        cover.date = datetime.datetime.now()
+        cover.user_id = user_id
+        await cover.create()
+        file_name = AUDIO_DIR_PATH + 'cover' + str(cover.id) + '.wav'
+        await cover.update(file_name=file_name).apply()
+        return cover
+
+    async def get_cover(self, cover_id):
+        cover = await Cover.get(cover_id)
+        return cover
+
+    async def get_user_covers_page(self, user_id, page_num):
+        return await Cover.query.where(Cover.user_id == user_id).order_by(Cover.date, Cover.name).limit(
+            COVERS_PAGE_VOLUME). \
+            offset(page_num * COVERS_PAGE_VOLUME).gino.all()
+
+    async def count_user_covers(self, user_id):
+        return await db.select([db.func.count(Cover.id)]).where(Cover.user_id == user_id).gino.scalar()
+
+    async def get_user_song_covers(self, user_id, song_id):
+        return await Cover.query.where((Cover.user_id == user_id) & (Cover.song_id == song_id)). \
+            order_by(Cover.date, Cover.name).gino.all()
+
+    # FRIENDS #####################
+
+    async def create_subscription(self, subscribed_id, subscriber_id):
+        subscription = Subscription()
+        subscription.subscribed_id = subscribed_id
+        subscription.subscriber_id = subscriber_id
+        await subscription.create()
+
+        return subscription
+
+    async def get_user_subscriptions(self, user_id):
+        return await db.select([User]).select_from(Subscription.join(User, (Subscription.subscribed_id == User.id))) \
+            .where(Subscription.subscriber_id == user_id).gino.all()
 
 
 db_api = DBCommands()

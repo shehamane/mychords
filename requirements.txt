@@ -52,6 +52,7 @@ numpy==1.23.3
 oauthlib==3.2.1
 opt-einsum==3.3.0
 packaging==21.3
+Pillow==9.2.0
 pooch==1.6.0
 protobuf==3.19.6
 pyasn1==0.4.8

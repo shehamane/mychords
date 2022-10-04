@@ -132,3 +132,6 @@ dmypy.json
 pgdata
 
 database/
+src/.env
+audio/
+img/tmp.png

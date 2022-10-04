@@ -5,10 +5,6 @@ main_menu_kb = ReplyKeyboardMarkup([
         KeyboardButton(text='ЗАГРУЗИТЬ ПЕСНЮ'),
     ],
     [
-        KeyboardButton(text='ЗАГРУЗИТЬ КАВЕР')
-    ],
-    [
-        KeyboardButton(text='МОИ КАВЕРЫ'),
         KeyboardButton(text='МОИ ПЕСНИ'),
     ],
     [

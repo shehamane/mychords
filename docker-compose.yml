@@ -28,6 +28,7 @@ services:
     command: python src/app.py
     volumes:
       - ./audio:/build/audio
+      - ./img:/build/img
     restart: always
     depends_on:
       - db

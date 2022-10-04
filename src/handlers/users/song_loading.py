@@ -1,21 +1,20 @@
-import datetime
-from datetime import timedelta
-
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text
 from aiogram.types import Message, CallbackQuery
+import autochord
 
-from keyboards.default import main_menu_kb
 from keyboards.inline.formations import formations_kb
 from loader import dp
 from states import SongLoading
 from utils.callback_datas import choose_formation_cd
 from utils.db_api.api import db_api as db
 from utils.misc.files import download_audio
+from utils.misc.time import seconds_to_time
 
 
 @dp.message_handler(Text(ignore_case=True, contains=['загрузить песню']), state='*')
 async def get_audio_file(message: Message, state: FSMContext):
+    await state.finish()
     text = 'Загрузите аудио, имя файла должно быть в формате "АВТОР - НАЗВАНИЕ.mp3".'
 
     async with state.proxy() as data:
@@ -32,9 +31,7 @@ async def get_formation(message: Message, state: FSMContext):
             return
         data['name'] = name
         data['author'] = author
-        m, s = divmod(duration, 60)
-        h, m = divmod(m, 60)
-        data['duration'] = datetime.time(h, m, s)
+        data['duration'] = seconds_to_time(duration)
         data['filename'] = filename
 
     text = 'Укажите гитарный строй:'
@@ -52,9 +49,17 @@ async def retry_to_get_audio_file(message: Message, state: FSMContext):
 async def load_song(call: CallbackQuery, callback_data: dict, state: FSMContext):
     user = await db.get_current_user()
     async with state.proxy() as data:
-        song_id = await db.create_song(user.id, data['name'], data['author'],
-                                       data['duration'], data['filename'],
-                                       callback_data.get('formation'))
+        song = await db.create_song(user.id, data['name'], data['author'],
+                                    data['duration'], data['filename'],
+                                    callback_data.get('formation'))
+        await load_chords(song.id)
         await data['pinned_msg'].edit_text('Песня успешно загружена!', reply_markup=None)
 
     await state.finish()
+
+
+async def load_chords(song_id):
+    song = await db.get_song(song_id)
+    chords = autochord.recognize(song.file_name)
+    for start, end, name in chords:
+        await db.create_chord(song_id, name, start, end)
